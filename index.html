@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Distrito de Estudiantes · Seguimiento académico</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">
+    <div class="brand-mark">DE</div>
+    <div>
+      <h1>Distrito de Estudiantes</h1>
+      <p>Seguimiento académico con distrito y dirección de origen</p>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button id="btn-agregar" class="btn btn-add" type="button">＋ Agregar alumno</button>
+    <button id="btn-export-json" class="btn btn-primary" type="button">Exportar JSON</button>
+    <button id="btn-export-csv" class="btn" type="button">Exportar CSV</button>
+    <label class="btn" for="file-import">Importar JSON</label>
+    <input id="file-import" type="file" accept=".json,application/json" hidden>
+    <button id="btn-print" class="btn" type="button">Imprimir</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="stats" id="stats"></section>
+
+  <section class="filters">
+    <div class="field field-search">
+      <label for="f-buscar">Buscar alumno</label>
+      <input id="f-buscar" type="search" placeholder="Apellido o nombre…" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label for="f-grado">Grado</label>
+      <select id="f-grado">
+        <option value="todos">Todos los grados</option>
+        <optgroup label="Primaria (1° a 6°)" id="og-prim"></optgroup>
+        <optgroup label="Secundaria (1° a 5°)" id="og-sec"></optgroup>
+        <optgroup label="Inicial (3 a 5 años)" id="og-ini"></optgroup>
+      </select>
+    </div>
+
+    <div class="field field-seccion">
+      <label for="f-seccion">Sección</label>
+      <select id="f-seccion" disabled>
+        <option value="todas">Todas</option>
+        <option value="A">Sección A</option>
+        <option value="B">Sección B</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="f-provincia">Provincia</label>
+      <select id="f-provincia">
+        <option value="todas">Todas las provincias</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="f-distrito">Distrito</label>
+      <select id="f-distrito" disabled>
+        <option value="todos">Todos los distritos</option>
+      </select>
+    </div>
+
+    <div class="field field-orden">
+      <label for="f-orden">Ordenar</label>
+      <select id="f-orden">
+        <option value="grado">Grado (de 1° primaria a 5° secundaria)</option>
+        <option value="nombre">Apellido A–Z</option>
+        <option value="distrito">Distrito asignado</option>
+      </select>
+    </div>
+
+    <button id="btn-limpiar" class="btn btn-ghost" type="button">Limpiar filtros</button>
+  </section>
+
+  <p class="resultados" id="resultados"></p>
+
+  <div class="tabla-scroll">
+    <table class="tabla" id="tabla">
+      <thead>
+        <tr>
+          <th class="col-n">#</th>
+          <th>Alumno</th>
+          <th class="col-grado">Grado</th>
+          <th>Provincia</th>
+          <th>Distrito de origen</th>
+          <th>Dirección / referencia</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="vacio" id="vacio" hidden>
+      No hay alumnos que coincidan con los filtros seleccionados.
+    </div>
+  </div>
+
+  <section class="leyenda">
+    <h2>Leyenda</h2>
+    <ul>
+      <li><strong>Editar:</strong> cada fila tiene el botón <em>✎ Editar</em> para corregir nombre, grado, sección y ubicación. Los alumnos del JSON muestran <em>↺ Restaurar original</em> si los modificaste.</li>
+      <li><strong>Provincia y distrito:</strong> se guardan en tu navegador automáticamente al cambiarlos.</li>
+      <li><strong>Dirección:</strong> calle, urbanización o referencia de donde viene el alumno.</li>
+    </ul>
+    <p id="estado-guardado" class="estado-guardado"></p>
+  </section>
+</main>
+
+<footer class="app-footer">
+  <span id="foot-info"></span>
+</footer>
+
+<div class="modal-overlay" id="modal-agregar" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+    <h2 id="modal-titulo">Agregar alumno</h2>
+    <p class="modal-sub" id="modal-sub">Para alumnos que no están en el archivo JSON original.</p>
+
+    <form id="form-agregar" novalidate>
+      <div class="field">
+        <label for="n-nombre">Nombre completo</label>
+        <input id="n-nombre" type="text" placeholder="Apellido(s) y nombre(s)" autocomplete="off">
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label for="n-grado">Grado</label>
+          <select id="n-grado"></select>
+        </div>
+        <div class="field">
+          <label for="n-seccion">Sección</label>
+          <select id="n-seccion" disabled>
+            <option value="">Sin sección</option>
+            <option value="A">Sección A</option>
+            <option value="B">Sección B</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label for="n-provincia">Provincia</label>
+          <select id="n-provincia"></select>
+        </div>
+        <div class="field">
+          <label for="n-distrito">Distrito de origen</label>
+          <select id="n-distrito" disabled>
+            <option value="">— Seleccione provincia —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="n-direccion">Dirección / referencia</label>
+        <input id="n-direccion" type="text" placeholder="Calle, urbanización, referencia…" autocomplete="off">
+      </div>
+
+      <p class="modal-error" id="modal-error" hidden></p>
+
+      <div class="modal-actions">
+        <button type="button" class="btn" id="btn-cancelar">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="btn-guardar-alumno">Agregar alumno</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/distritos.js"></script>
+<script src="js/alumnos_data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
