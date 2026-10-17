@@ -18,7 +18,7 @@
   <div class="header-actions">
     <button id="btn-agregar" class="btn btn-add" type="button">＋ Agregar alumno</button>
     <button id="btn-export-json" class="btn btn-primary" type="button">Exportar JSON</button>
-    <button id="btn-export-csv" class="btn" type="button">Exportar CSV</button>
+    <button id="btn-export-xlsx" class="btn btn-excel" type="button">Exportar Excel</button>
     <label class="btn" for="file-import">Importar JSON</label>
     <input id="file-import" type="file" accept=".json,application/json" hidden>
     <button id="btn-print" class="btn" type="button">Imprimir</button>
@@ -34,14 +34,25 @@
       <input id="f-buscar" type="search" placeholder="Apellido o nombre…" autocomplete="off">
     </div>
 
-    <div class="field">
-      <label for="f-grado">Grado</label>
-      <select id="f-grado">
-        <option value="todos">Todos los grados</option>
-        <optgroup label="Primaria (1° a 6°)" id="og-prim"></optgroup>
-        <optgroup label="Secundaria (1° a 5°)" id="og-sec"></optgroup>
-        <optgroup label="Inicial (3 a 5 años)" id="og-ini"></optgroup>
-      </select>
+    <div class="field field-grado">
+      <label id="lbl-grado">Grado (varios)</label>
+      <div class="multiselect" id="ms-grado">
+        <button type="button" id="f-grado-btn" class="ms-trigger" aria-haspopup="true" aria-expanded="false" aria-labelledby="lbl-grado">
+          <span class="ms-valor" id="f-grado-texto">Todos los grados</span>
+          <span class="ms-caret" aria-hidden="true">▾</span>
+        </button>
+        <div class="ms-panel" id="f-grado-panel" hidden>
+          <div class="ms-acciones">
+            <button type="button" class="ms-accion" data-accion="todos">Marcar todos</button>
+            <button type="button" class="ms-accion" data-accion="ninguno">Limpiar</button>
+          </div>
+          <div class="ms-lista">
+            <div class="ms-grupo" id="og-prim"></div>
+            <div class="ms-grupo" id="og-sec"></div>
+            <div class="ms-grupo" id="og-ini"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="field field-seccion">
@@ -171,6 +182,7 @@
 
 <script src="js/distritos.js"></script>
 <script src="js/alumnos_data.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

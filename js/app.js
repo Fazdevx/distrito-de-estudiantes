@@ -26,7 +26,8 @@ const ESTADO = {
   filtrados: [],
   nuevos: [],
   ediciones: {},
-  editando: null
+  editando: null,
+  gradosSel: null
 };
 
 /* ---------------- Utilidades ---------------- */
@@ -257,29 +258,112 @@ function opcionesDistritos(select, provincia, incluirTodos) {
   select.disabled = lista.length === 0;
 }
 
-function popularGrados() {
-  const datos = ESTADO.alumnos;
-  const sel = document.getElementById("f-grado");
-  const previo = sel.value;
-  const disponibles = ORDEN_GRADOS.filter(g => datos.some(a => a.grado === g));
-  const grupos = {
-    prim: document.getElementById("og-prim"),
-    sec: document.getElementById("og-sec"),
-    ini: document.getElementById("og-ini")
-  };
-  Object.keys(grupos).forEach(k => { grupos[k].innerHTML = ""; });
+let firmaGrados = "";
 
-  disponibles.forEach(g => {
-    const op = document.createElement("option");
-    const cantidad = datos.filter(a => a.grado === g).length;
-    op.value = g;
-    op.textContent = etiquetaGrado(g) + " (" + cantidad + ")";
-    const nivel = NIVEL_GRADO[g];
-    if (grupos[nivel]) grupos[nivel].appendChild(op);
+function gradosDisponibles() {
+  return ORDEN_GRADOS.filter(g => ESTADO.alumnos.some(a => a.grado === g));
+}
+
+function gradoActivo(g) {
+  return ESTADO.gradosSel === null || ESTADO.gradosSel.has(g);
+}
+
+function resumenGrados() {
+  const disponibles = gradosDisponibles();
+  if (ESTADO.gradosSel === null) return "Todos los grados";
+  const sel = disponibles.filter(g => ESTADO.gradosSel.has(g));
+  if (sel.length === 0) return "Ningún grado seleccionado";
+  if (sel.length === 1) return etiquetaGrado(sel[0]);
+  if (sel.length === disponibles.length) return "Todos los grados";
+  return sel.length + " grados seleccionados";
+}
+
+function haySecundariaSeleccionada() {
+  if (ESTADO.gradosSel === null) return false;
+  return Array.from(ESTADO.gradosSel).some(g => g.endsWith("SEC"));
+}
+
+function sincronizarSeccionSegunGrado() {
+  const selSeccion = document.getElementById("f-seccion");
+  const habilitar = haySecundariaSeleccionada();
+  selSeccion.disabled = !habilitar;
+  if (!habilitar) selSeccion.value = "todas";
+}
+
+function popularGrados() {
+  const disponibles = gradosDisponibles();
+  const conteos = {};
+  disponibles.forEach(g => { conteos[g] = ESTADO.alumnos.filter(a => a.grado === g).length; });
+
+  const grupos = {
+    prim: { cont: document.getElementById("og-prim"), titulo: "Primaria (1° a 6°)" },
+    sec: { cont: document.getElementById("og-sec"), titulo: "Secundaria (1° a 5°)" },
+    ini: { cont: document.getElementById("og-ini"), titulo: "Inicial (3 a 5 años)" }
+  };
+
+  const firma = disponibles.map(g => g + ":" + conteos[g]).join("|");
+  if (firma !== firmaGrados) {
+    firmaGrados = firma;
+    Object.keys(grupos).forEach(k => { grupos[k].cont.innerHTML = ""; });
+
+    disponibles.forEach(g => {
+      const nivel = NIVEL_GRADO[g];
+      const cont = grupos[nivel] && grupos[nivel].cont;
+      if (!cont) return;
+
+      if (!cont.querySelector(".ms-grupo-titulo")) {
+        const titulo = document.createElement("p");
+        titulo.className = "ms-grupo-titulo";
+        titulo.textContent = grupos[nivel].titulo;
+        cont.appendChild(titulo);
+      }
+
+      const label = document.createElement("label");
+      label.className = "ms-opcion";
+
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.className = "ms-check";
+      chk.value = g;
+
+      const texto = document.createElement("span");
+      texto.textContent = etiquetaGrado(g);
+
+      const conteo = document.createElement("span");
+      conteo.className = "ms-conteo";
+      conteo.textContent = conteos[g];
+
+      label.appendChild(chk);
+      label.appendChild(texto);
+      label.appendChild(conteo);
+      cont.appendChild(label);
+    });
+  }
+
+  document.querySelectorAll("#f-grado-panel .ms-check").forEach(chk => {
+    chk.checked = gradoActivo(chk.value);
   });
 
-  if (previo) sel.value = previo;
-  if (!sel.value) sel.value = "todos";
+  const texto = document.getElementById("f-grado-texto");
+  if (texto) texto.textContent = resumenGrados();
+}
+
+function aplicarSeleccionGrados() {
+  const checks = Array.prototype.slice.call(document.querySelectorAll("#f-grado-panel .ms-check"));
+  const elegidos = checks.filter(c => c.checked).map(c => c.value);
+  ESTADO.gradosSel = (checks.length > 0 && elegidos.length === checks.length)
+    ? null
+    : new Set(elegidos);
+  sincronizarSeccionSegunGrado();
+  render();
+}
+
+function cerrarPanelGrado() {
+  const panel = document.getElementById("f-grado-panel");
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  document.getElementById("f-grado-btn").setAttribute("aria-expanded", "false");
+  document.getElementById("ms-grado").classList.remove("abierto");
 }
 
 /* ---------------- Filtrado y orden ---------------- */
@@ -287,7 +371,7 @@ function popularGrados() {
 function leerFiltros() {
   return {
     q: normalizar(document.getElementById("f-buscar").value),
-    grado: document.getElementById("f-grado").value,
+    grados: ESTADO.gradosSel,
     seccion: document.getElementById("f-seccion").value,
     provincia: document.getElementById("f-provincia").value,
     distrito: document.getElementById("f-distrito").value,
@@ -300,7 +384,7 @@ function aplicarFiltros() {
 
   const lista = ESTADO.alumnos.filter(a => {
     if (f.q && !normalizar(a.nombre).includes(f.q) && !normalizar(a.seccion).includes(f.q)) return false;
-    if (f.grado !== "todos" && a.grado !== f.grado) return false;
+    if (f.grados && !f.grados.has(a.grado)) return false;
     if (f.seccion !== "todas") {
       if (f.seccion === "A" && a.letra !== "A") return false;
       if (f.seccion === "B" && a.letra !== "B") return false;
@@ -567,6 +651,191 @@ function exportarCSV() {
   descargar("alumnos_filtrados.csv", csv, "text/csv;charset=utf-8");
 }
 
+const FILLS_NIVEL = { prim: "FFEEF3FF", sec: "FFEAFAF3", ini: "FFFDF0F6" };
+
+function fechaCorta() {
+  const d = new Date();
+  return String(d.getDate()).padStart(2, "0") + "/" +
+    String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
+}
+
+function marcaTiempo() {
+  const d = new Date();
+  return d.getFullYear() + "-" +
+    String(d.getMonth() + 1).padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0");
+}
+
+function valorNota(valor) {
+  if (valor === "" || valor == null) return "";
+  const n = Number(valor);
+  return isNaN(n) ? valor : n;
+}
+
+function descripcionFiltros() {
+  const partes = [];
+  const disponibles = gradosDisponibles();
+  if (ESTADO.gradosSel === null) {
+    partes.push("Todos los grados");
+  } else {
+    const elegidos = disponibles.filter(g => ESTADO.gradosSel.has(g));
+    partes.push(elegidos.length ? elegidos.map(etiquetaGrado).join(", ") : "Sin grados seleccionados");
+  }
+
+  const selSeccion = document.getElementById("f-seccion");
+  if (!selSeccion.disabled && selSeccion.value !== "todas") partes.push("Sección " + selSeccion.value);
+
+  const q = document.getElementById("f-buscar").value.trim();
+  if (q) partes.push("Búsqueda: \"" + q + "\"");
+
+  const prov = document.getElementById("f-provincia").value;
+  if (prov !== "todas") partes.push("Provincia: " + prov);
+
+  const dist = document.getElementById("f-distrito").value;
+  if (dist !== "todos") partes.push("Distrito: " + dist);
+
+  return partes.join("   ·   ");
+}
+
+function exportarExcel() {
+  if (typeof ExcelJS === "undefined") {
+    avisar("No se pudo cargar el generador de Excel. Se descarga un CSV equivalente.", true);
+    exportarCSV();
+    return;
+  }
+
+  const totalCols = 8 + NOTAS_KEYS.length;
+  const libro = new ExcelJS.Workbook();
+  libro.creator = "Distrito de Estudiantes";
+  libro.lastModifiedBy = "Distrito de Estudiantes";
+  libro.created = new Date();
+  libro.modified = new Date();
+
+  const hoja = libro.addWorksheet("Seguimiento académico", {
+    views: [{ state: "frozen", xSplit: 0, ySplit: 4 }],
+    pageSetup: {
+      orientation: "landscape",
+      fitToPage: true,
+      fitToWidth: 1,
+      fitToHeight: 0,
+      printTitlesRow: "3:4",
+      horizontalCentered: true,
+      margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 }
+    }
+  });
+
+  const anchos = [6, 34, 18, 11, 8, 16, 20, 32];
+  NOTAS_KEYS.forEach(() => anchos.push(6));
+  anchos.forEach((w, i) => { hoja.getColumn(i + 1).width = w; });
+
+  const bordeFino = {
+    top: { style: "thin", color: { argb: "FFD6DEEB" } },
+    left: { style: "thin", color: { argb: "FFD6DEEB" } },
+    bottom: { style: "thin", color: { argb: "FFD6DEEB" } },
+    right: { style: "thin", color: { argb: "FFD6DEEB" } }
+  };
+
+  hoja.mergeCells(1, 1, 1, totalCols);
+  const titulo = hoja.getCell(1, 1);
+  titulo.value = "DISTRITO DE ESTUDIANTES · REPORTE DE SEGUIMIENTO ACADÉMICO";
+  titulo.font = { name: "Calibri", size: 15, bold: true, color: { argb: "FFFFFFFF" } };
+  titulo.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+  titulo.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF16305F" } };
+  hoja.getRow(1).height = 28;
+
+  hoja.mergeCells(2, 1, 2, totalCols);
+  const subtitulo = hoja.getCell(2, 1);
+  subtitulo.value = "Generado el " + fechaCorta() + "   ·   " +
+    ESTADO.filtrados.length + " de " + ESTADO.alumnos.length + " alumnos   ·   Filtros: " + descripcionFiltros();
+  subtitulo.font = { name: "Calibri", size: 10, italic: true, color: { argb: "FF5A6B85" } };
+  subtitulo.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+  subtitulo.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF2F5FB" } };
+  hoja.getRow(2).height = 18;
+
+  hoja.mergeCells(3, 1, 3, 8);
+  const grupoA = hoja.getCell(3, 1);
+  grupoA.value = "DATOS DEL ALUMNO Y UBICACIÓN DE ORIGEN";
+  hoja.mergeCells(3, 9, 3, totalCols);
+  const grupoB = hoja.getCell(3, 9);
+  grupoB.value = "CALIFICACIONES (B–M)";
+  [grupoA, grupoB].forEach(celda => {
+    celda.font = { name: "Calibri", size: 10.5, bold: true, color: { argb: "FFFFFFFF" } };
+    celda.alignment = { vertical: "middle", horizontal: "center" };
+    celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2B5CA8" } };
+    celda.border = bordeFino;
+  });
+  hoja.getRow(3).height = 20;
+
+  const cabeceras = ["N°", "Alumno", "Grado", "Sección", "Fila", "Provincia", "Distrito de origen", "Dirección / referencia"]
+    .concat(NOTAS_KEYS);
+  cabeceras.forEach((texto, i) => {
+    const celda = hoja.getCell(4, i + 1);
+    celda.value = texto;
+    celda.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+    celda.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+    celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F5FD6" } };
+    celda.border = bordeFino;
+  });
+  hoja.getRow(4).height = 22;
+
+  ESTADO.filtrados.forEach((a, i) => {
+    const u = ubicacionDe(a);
+    const fila = hoja.addRow([
+      i + 1,
+      a.nombre,
+      etiquetaGrado(a.grado),
+      a.letra ? a.letra : "—",
+      Number(a.fila) || a.fila,
+      u.provincia || "Sin asignar",
+      u.distrito || "Sin asignar",
+      u.direccion || ""
+    ].concat(NOTAS_KEYS.map(k => valorNota(a.notas[k]))));
+
+    fila.height = 18;
+    fila.eachCell({ includeEmpty: true }, (celda, col) => {
+      celda.border = bordeFino;
+      celda.font = { name: "Calibri", size: 11, color: { argb: "FF17233B" } };
+      celda.alignment = { vertical: "middle" };
+      if (i % 2 === 1) {
+        celda.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F8FD" } };
+      }
+    });
+
+    [1, 4, 5].concat(NOTAS_KEYS.map((_, n) => 9 + n)).forEach(col => {
+      fila.getCell(col).alignment = { vertical: "middle", horizontal: "center" };
+    });
+
+    const rellenoNivel = FILLS_NIVEL[NIVEL_GRADO[a.grado]];
+    if (rellenoNivel) {
+      const cg = fila.getCell(3);
+      cg.fill = { type: "pattern", pattern: "solid", fgColor: { argb: rellenoNivel } };
+      cg.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FF17233B" } };
+    }
+
+    [6, 7].forEach(col => {
+      const celda = fila.getCell(col);
+      if (celda.value === "Sin asignar") {
+        celda.font = { name: "Calibri", size: 11, italic: true, color: { argb: "FFB26A00" } };
+      }
+    });
+  });
+
+  if (ESTADO.filtrados.length > 0) {
+    hoja.autoFilter = {
+      from: { row: 4, column: 1 },
+      to: { row: 4 + ESTADO.filtrados.length, column: totalCols }
+    };
+  }
+
+  const nombreArchivo = "reporte_alumnos_" + marcaTiempo() + ".xlsx";
+  libro.xlsx.writeBuffer().then(buffer => {
+    descargar(nombreArchivo, buffer, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    avisar("Excel exportado ✓ " + ESTADO.filtrados.length + " alumnos con formato de reporte.");
+  }).catch(err => {
+    avisar("No se pudo generar el Excel: " + err.message, true);
+  });
+}
+
 function importarJSON(file) {
   const lector = new FileReader();
   lector.onload = () => {
@@ -753,7 +1022,7 @@ function cerrarModal() {
 
 function limpiarFiltros() {
   document.getElementById("f-buscar").value = "";
-  document.getElementById("f-grado").value = "todos";
+  ESTADO.gradosSel = null;
   document.getElementById("f-seccion").value = "todas";
   document.getElementById("f-seccion").disabled = true;
   document.getElementById("f-provincia").value = "todas";
@@ -761,6 +1030,7 @@ function limpiarFiltros() {
   document.getElementById("f-distrito").value = "todos";
   document.getElementById("f-distrito").disabled = true;
   document.getElementById("f-orden").value = "grado";
+  cerrarPanelGrado();
   render();
 }
 
@@ -876,12 +1146,34 @@ function vincularEventos() {
 
   document.getElementById("f-buscar").addEventListener("input", rerender);
 
-  document.getElementById("f-grado").addEventListener("change", e => {
-    const esSecundaria = e.target.value.endsWith("SEC");
-    const selSeccion = document.getElementById("f-seccion");
-    selSeccion.disabled = !esSecundaria;
-    if (!esSecundaria) selSeccion.value = "todas";
-    rerender();
+  const msGrado = document.getElementById("ms-grado");
+  const btnGrado = document.getElementById("f-grado-btn");
+  const panelGrado = document.getElementById("f-grado-panel");
+
+  btnGrado.addEventListener("click", e => {
+    e.stopPropagation();
+    const abrir = panelGrado.hidden;
+    panelGrado.hidden = !abrir;
+    btnGrado.setAttribute("aria-expanded", String(abrir));
+    msGrado.classList.toggle("abierto", abrir);
+  });
+
+  panelGrado.addEventListener("change", e => {
+    if (e.target.classList && e.target.classList.contains("ms-check")) aplicarSeleccionGrados();
+  });
+
+  panelGrado.addEventListener("click", e => {
+    const accion = e.target.getAttribute && e.target.getAttribute("data-accion");
+    if (!accion) return;
+    e.preventDefault();
+    document.querySelectorAll("#f-grado-panel .ms-check").forEach(chk => {
+      chk.checked = accion === "todos";
+    });
+    aplicarSeleccionGrados();
+  });
+
+  document.addEventListener("click", e => {
+    if (!msGrado.contains(e.target)) cerrarPanelGrado();
   });
 
   document.getElementById("f-seccion").addEventListener("change", rerender);
@@ -906,7 +1198,7 @@ function vincularEventos() {
   document.getElementById("btn-limpiar").addEventListener("click", limpiarFiltros);
 
   document.getElementById("btn-export-json").addEventListener("click", exportarJSON);
-  document.getElementById("btn-export-csv").addEventListener("click", exportarCSV);
+  document.getElementById("btn-export-xlsx").addEventListener("click", exportarExcel);
   document.getElementById("btn-print").addEventListener("click", () => window.print());
 
   document.getElementById("file-import").addEventListener("change", e => {
@@ -924,7 +1216,9 @@ function vincularEventos() {
   });
 
   document.addEventListener("keydown", e => {
-    if (e.key === "Escape" && !document.getElementById("modal-agregar").hidden) cerrarModal();
+    if (e.key !== "Escape") return;
+    cerrarPanelGrado();
+    if (!document.getElementById("modal-agregar").hidden) cerrarModal();
   });
 
   document.getElementById("n-grado").addEventListener("change", e => {
